@@ -1,0 +1,203 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Aug  8 10:14:54 2024
+
+@author: Nicolai 
+"""
+
+import pandas as pd
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+from sklearn.manifold import TSNE
+from scipy.stats import pearsonr
+import plotly.graph_objects as go
+import numpy as np
+from datetime import datetime
+import umap
+from datetime import datetime
+
+#%% Load the dataset
+df = pd.read_csv('dataset.csv')
+df['phase'] = df['phase'].abs() #phase is negative and we cannot do log of negative numbers
+
+#%% Allow the user to see the available ranges
+print("Current data range:")
+print(f"input_file range: {df['input_file'].min()} to {df['input_file'].max()}")
+print(f"f range: {df['f'].min()} to {df['f'].max()}")
+print(f"mua range: {df['mua'].min()} to {df['mua'].max()}")
+print(f"musp range: {df['musp'].min()} to {df['musp'].max()}")
+print(f"phase range: {df['phase'].min()} to {df['phase'].max()}")
+print(f"amplitude range: {df['amplitude'].min()} to {df['amplitude'].max()}")
+print(f"n_int range: {df['n_int'].min()} to {df['n_int'].max()}")
+
+#%% Function to add noise to phase and amplitude
+def add_noise_to_dataframe(df, phase_noise_mean=0, phase_noise_var=0.00, amplitude_noise_mean=0, amplitude_noise_var=0.000):
+    # Create a copy of the DataFrame to avoid modifying the original
+    noisy_df = df.copy()
+    
+    # Add noise to the 'phase' column
+    noisy_df['phase'] += np.random.normal(phase_noise_mean, np.sqrt(phase_noise_var), df['phase'].shape)
+    
+    # Add noise to the 'amplitude' column
+    noisy_df['amplitude'] += np.random.normal(amplitude_noise_mean, np.sqrt(amplitude_noise_var), df['amplitude'].shape)
+    
+    return noisy_df
+
+# Specify here the type of noise that should be added:
+add_noise_to_dataframe(df, phase_noise_mean=0,        #for 99% CI of +-3% noise phase_noise_mean= 0.0093     //  for 99% CI of +-1.5% noise phase_noise_mean= 0.004965
+                       phase_noise_var=0.0000,        #for 99% CI of +-3% noise phase_noise_var=0.00385       //  for 99% CI of +-1.5% noise noise phase_noise_var=0.00192
+                       amplitude_noise_mean=0,        #for 99% CI of +-3% noise amplitude_noise_mean=0        //  for 99% CI of +-1.5% noise amplitude_noise_mean=0
+                       amplitude_noise_var=0.000)     #for 99% CI of +-3% noise amplitude_noise_var=0.00893   //  for 99% CI of +-1.5% noise amplitude_noise_var=0.00455
+
+#%% Allow the user to define a subset of the data to analyze
+subset = df[(df['input_file'] >= 0) & (df['input_file'] <= 90159)] #We basically select the whole datatset, it doesn´t take that much to plot
+
+#%%Create an interactive 3D plot using Plotl
+fig = go.Figure(data=[go.Scatter3d(
+    x=subset['amplitude'],
+    y=subset['phase'],
+    z=subset['mua'],
+    mode='markers',
+    marker=dict(
+        size=2,
+        color=subset['f'],
+        colorscale='Viridis',
+        opacity=1
+    )
+)])
+
+
+fig.update_layout(
+    scene=dict(
+        xaxis_title='amplitude',
+        yaxis_title='phase',
+        zaxis_title='mua',
+        xaxis_type='log',
+        yaxis_type='log',
+        zaxis_type='log'
+    ),
+    margin=dict(l=0, r=0, b=0, t=0)
+)
+
+# Generate filename with current timestamp
+current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+filename = f"interactive_3d_plot_{current_time}.html"
+
+fig.write_html(filename)
+print(f"Interactive 3D plot saved to '{filename}'.")
+
+#%% UMAP Analysis
+def perform_umap_visualization(X, y):
+    reducer = umap.UMAP(n_neighbors=15, min_dist=0, n_components=2, random_state=42)
+    X_umap = reducer.fit_transform(X)
+    plt.figure(figsize=(10, 8))
+    plt.scatter(X_umap[:, 0], X_umap[:, 1], c=y[:, 0], cmap='viridis', s=1)
+    plt.colorbar(label='mua')
+    plt.title('UMAP Visualization')
+    plt.xlabel('Vector 1')
+    plt.ylabel('Vector 2')
+    plt.show()
+
+#%%don´t bother
+
+'''
+#%% Allow the user to define a subset of the data to analyze
+#start_input_file = int(input("Enter the starting input_file (integer): "))
+#end_input_file = int(input("Enter the ending input_file (integer): "))
+#start_f = float(input("Enter the starting f value: "))
+#end_f = float(input("Enter the ending f value: "))
+
+#start_n_int = float(input("Enter the starting n_int value: "))
+#end_n_int = float(input("Enter the ending n_int value: "))
+
+
+
+#%% newstuff actually works, but is bad
+
+
+def symlog_scale(x, linthresh=1):
+    """
+    Compute a symmetric log scale for the given data.
+    """
+    with np.errstate(invalid='ignore'):
+        return np.sign(x) * np.log1p(np.abs(x) / linthresh)
+
+def create_custom_symlog_3d_plot(subset, linthresh=1):
+    # Apply symlog scale to relevant columns
+    for col in ['amplitude', 'phase', 'mua']:
+        subset[f'{col}_symlog'] = symlog_scale(subset[col], linthresh)
+
+    fig = go.Figure(data=[go.Scatter3d(
+        x=subset['amplitude_symlog'],
+        y=subset['phase_symlog'],
+        z=subset['mua_symlog'],
+        mode='markers',
+        marker=dict(
+            size=2,
+            color=subset['f'],
+            colorscale='Viridis',
+            opacity=1
+        ),
+        hovertext=[f'Amplitude: {a}<br>Phase: {p}<br>Mua: {m}<br>F: {f}' 
+                   for a, p, m, f in zip(subset['amplitude'], subset['phase'], 
+                                         subset['mua'], subset['f'])],
+        hoverinfo='text'
+    )])
+
+    # Create custom tick labels
+    tick_vals = [-3, -2, -1, 0, 1, 2, 3]
+    tick_text = [f'{-np.exp(abs(x))-1:.1e}' if x < 0 else f'{np.exp(abs(x))-1:.1e}' for x in tick_vals]
+    tick_text[3] = '0'  # Replace '0.0e+00' with just '0'
+
+    fig.update_layout(
+        scene=dict(
+            xaxis_title='Amplitude (symlog)',
+            yaxis_title='Phase (symlog)',
+            zaxis_title='Mua (symlog)',
+            xaxis=dict(tickvals=tick_vals, ticktext=tick_text),
+            yaxis=dict(tickvals=tick_vals, ticktext=tick_text),
+            zaxis=dict(tickvals=tick_vals, ticktext=tick_text)
+        ),
+        margin=dict(l=0, r=0, b=0, t=0),
+        title='Interactive 3D Plot (Symlog Scale)'
+    )
+
+    # Generate filename with current timestamp
+    current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"interactive_3d_plot_symlog_{current_time}.html"
+
+    fig.write_html(filename)
+    print(f"Interactive 3D plot saved to '{filename}'. Please open this file in your web browser to view the visualization.")
+
+# Example usage:
+create_custom_symlog_3d_plot(subset, linthresh=0.1)
+# create_custom_symlog_3d_plot(subset)
+#%% Dimensionality reduction using t-SNE
+X = subset[['f', 'phase', 'amplitude']]
+tsne = TSNE(n_components=2, random_state=42)
+X_tsne = tsne.fit_transform(X)
+
+fig, ax = plt.subplots()
+ax.scatter(X_tsne[:, 0], X_tsne[:, 1], c=subset['input_file'])
+ax.set_title('t-SNE Visualization')
+plt.show()
+
+#%% Correlation analysis
+print("Correlation matrix:")
+print(subset[['f', 'phase', 'amplitude']].corr())
+
+for col1 in ['f', 'phase', 'amplitude']:
+    for col2 in ['f', 'phase', 'amplitude']:
+        if col1 != col2:
+            corr, p_value = pearsonr(subset[col1], subset[col2])
+            print(f"Correlation between {col1} and {col2}: {corr:.2f} (p-value: {p_value:.2f})")#%% Analyze the relationship between variables with a 3D Graph
+fig = plt.figure()
+s = 0.01
+ax = fig.add_subplot(111, projection='3d')
+ax.scatter(subset['phase'], subset['mua'], subset['musp'], c=subset['n_int'])
+ax.set_xlabel('x')
+ax.set_ylabel('y')
+ax.set_zlabel('z')
+plt.title('3D Plot of Dataset')
+plt.show()
+'''
