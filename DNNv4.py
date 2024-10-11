@@ -28,133 +28,17 @@ physical_devices = tf.config.list_physical_devices('GPU')
 if len(physical_devices) > 0:
     tf.config.experimental.set_memory_growth(physical_devices[0], True)
     
-#%%
+#%% Check for GPU
 gpu_available = tf.test.is_gpu_available()
     
-#%% Load and preprocess the dataset
-def load_and_preprocess_data(file_path):
-    data = pd.read_csv(file_path)
-    
-    # Group the data by input_file
-    grouped = data.groupby('input_file')
-    
-    X_list = []
-    y_list = []
-    
-    for _, group in grouped:
-        # Extract phase and amplitude values (assuming 6 frequencies)
-        phases = group['phase'].values
-        amplitudes = group['amplitude'].values
-        
-        # Combine phase and amplitude into a single input vector
-        X = np.concatenate([phases, amplitudes])
-        
-        # Extract mua and musp (constant for each input_file)
-        y = group[['mua', 'musp']].iloc[0].values
-        
-        X_list.append(X)
-        y_list.append(y)
-        
-        
-    
-    return np.array(X_list), np.array(y_list)
-
-#%%Add noise
-def add_noise_to_dataset(X, y, phase_noise_mean=0, phase_noise_var=0.00, amplitude_noise_mean=0, amplitude_noise_var=0.000):
-    noisy_X = X.copy()
-    num_features = X.shape[1] // 2  # Assuming the first half are phases and the second half are amplitudes
-    
-    # Add noise to phases
-    noisy_X[:, :num_features] += np.random.normal(phase_noise_mean, np.sqrt(phase_noise_var), (X.shape[0], num_features))
-    
-    # Add noise to amplitudes
-    noisy_X[:, num_features:] += np.random.normal(amplitude_noise_mean, np.sqrt(amplitude_noise_var), (X.shape[0], num_features))
-    
-    return np.vstack((X, noisy_X)), np.vstack((y, y))
-
-#%%Add noise v2
-def add_noise_to_dataset(X, y, phase_noise_mean=0, phase_noise_var=0.00, amplitude_noise_mean=0, amplitude_noise_var=0.000):
-    noisy_X = X.copy()
-    num_features = X.shape[1] // 2  # Assuming the first half are phases and the second half are amplitudes
-    
-    # Generate multiplicative noise factors for phases
-    phase_noise_factors = np.random.normal(phase_noise_mean, np.sqrt(phase_noise_var), (X.shape[0], num_features))
-    #phase_noise_factors = np.exp(phase_noise_factors)  # Convert to multiplicative factors
-    
-    # Apply multiplicative noise to phases
-    noisy_X[:, :num_features] *= phase_noise_factors
-    
-    # Generate multiplicative noise factors for amplitudes
-    amplitude_noise_factors = np.random.normal(amplitude_noise_mean, np.sqrt(amplitude_noise_var), (X.shape[0], num_features))
-    #amplitude_noise_factors = np.exp(amplitude_noise_factors)  # Convert to multiplicative factors
-    
-    # Apply multiplicative noise to amplitudes
-    noisy_X[:, num_features:] *= amplitude_noise_factors
-    
-    return np.vstack((X, noisy_X)), np.vstack((y, y))
-
-#%%Add Noise v3
-def add_noise_to_dataset(X, y, phase_noise_mean=1, phase_noise_var=0.0, amplitude_noise_mean=1, amplitude_noise_var=0.0):
-    noisy_X = X.copy()
-    num_features = X.shape[1] // 2  # Assuming the first half are phases and the second half are amplitudes
-    
-    # Generate noise for phases and multiply
-    phase_noise = np.random.normal(phase_noise_mean, np.sqrt(phase_noise_var), (X.shape[0], num_features))
-    noisy_X[:, :num_features] *= phase_noise
-    
-    # Generate noise for amplitudes and multiply
-    amplitude_noise = np.random.normal(amplitude_noise_mean, np.sqrt(amplitude_noise_var), (X.shape[0], num_features))
-    noisy_X[:, num_features:] *= amplitude_noise
-    
-    return np.vstack((X, noisy_X)), np.vstack((y, y))
-
-
-
-
-
-#%%Remove and Mask
-def remove_and_mask_data(X, y, removal_percentage=0.0):
-    mask = np.random.choice([True, False], size=X.shape,
-                            p=[1-removal_percentage, removal_percentage])
-    X_masked = np.where(mask, X, np.nan)
-    return X_masked, y
-#%%preprocess and define noise levels 
-def preprocess_data_with_augmentation(file_path, phase_noise_mean=0, phase_noise_var=0, 
-                                      amplitude_noise_mean=0, amplitude_noise_var=0, 
-                                      removal_percentage=0.0):
-    X, y = load_and_preprocess_data(file_path)
-    X_noisy, y_noisy = add_noise_to_dataset(X, y, phase_noise_mean, phase_noise_var, 
-                                            amplitude_noise_mean, amplitude_noise_var)
-    X_masked, y_masked = remove_and_mask_data(X_noisy, y_noisy, removal_percentage)
-    return X_masked, y_masked
-
-#####-------------------------------MAIN CODE STARTS----------------------#######
-
-#%% Load the dataset and add  noise
-X, y = preprocess_data_with_augmentation('dataset.csv',                                        #considering a 95% interval of +-3% noise lovel: 
-                                         phase_noise_mean= 1, phase_noise_var= 0,   #phase_noise_mean= -0.0093, phase_noise_var=0.00385,
-                                         amplitude_noise_mean=1, amplitude_noise_var= 0,  #amplitude_noise_mean=0, amplitude_noise_var=0.00893
-                                         removal_percentage=0.0)
-   
 #%% Just load a  dataset
 
-X, y = load_and_preprocess_data('output_dataset_with_noise_0percent.csv')
+X, y = load_and_preprocess_data('OutputDataset-of-Generate-Noisy-Dataset.-py-.csv')
 
 #%% Split the data into training, validation, and test sets
 X_train_val, X_test, y_train_val, y_test = train_test_split(X, y, test_size=0.2, random_state=137) #splitting into training and validation+test
 X_train, X_val, y_train, y_val = train_test_split(X_train_val, y_train_val, test_size=0.5, random_state=137) #splitting validation & test
 
-#%% Logarithmic transformation & Standardize the input features
-'''
-X_train_log = np.log1p(X_train) #it´s not a good idea because we have negative values and you can´t tranform negative values, the scaler alone is enough
-X_val_log = np.log1p(X_val)
-X_test_log = np.log1p(X_test)
-
-scaler = StandardScaler()
-X_train_scaled = scaler.fit_transform(X_train_log)
-X_val_scaled = scaler.transform(X_val_log)
-X_test_scaled = scaler.transform(X_test_log)
-'''
 #%% Standardize the input features
 
 scaler = StandardScaler()
@@ -276,6 +160,7 @@ plt.tight_layout()
 plt.show()
 
 
+#%% RUN THE FOLLOWING CELLS ONLY IF YOU´RE INTERESTED IN K-FOlD CROSS VALIDATION 
 #%% K-Fold cross validation v2
 
 # Define the k-fold cross-validation
@@ -366,43 +251,3 @@ with open(tflite_model_name, 'wb') as f:
 
 print("Model exported to TensorFlow Lite format: .tflite")
 
-#%% K-Fold Cross-Validation
-'''
-k_fold = KFold(n_splits=5, shuffle=True, random_state=137)
-cv_scores = []
-
-for fold, (train_idx, val_idx) in enumerate(k_fold.split(X, y)):
-    X_train_fold, X_val_fold = X[train_idx], X[val_idx]
-    y_train_fold, y_val_fold = y[train_idx], y[val_idx]
-    
-    scaler = StandardScaler()
-    X_train_fold_scaled = scaler.fit_transform(X_train_fold)
-    X_val_fold_scaled = scaler.transform(X_val_fold)
-    
-    model = Sequential([
-       Masking(mask_value=np.nan, input_shape=(12,)),
-       Dense(24, activation='silu'),
-       Dense(24, activation='mish'),
-       Dense(24, activation='mish'),
-       Dense(24, activation='silu'),
-       Dense(2)
-   ])
-
-    
-    model.compile(optimizer=optimizer, loss='mean_squared_error', metrics=['mae'])
-    
-    history = model.fit(
-        X_train_fold_scaled, y_train_fold,
-        validation_data=(X_val_fold_scaled, y_val_fold),
-        epochs=10,
-        batch_size=100,
-        callbacks=[EarlyStopping(monitor='val_loss', patience=20, restore_best_weights=True)],
-        verbose=0
-    )
-    
-    val_loss, val_mae = model.evaluate(X_val_fold_scaled, y_val_fold, verbose=0)
-    cv_scores.append(val_mae)
-    print(f"Fold {fold+1} - Validation MAE: {val_mae:.4f}")
-
-print(f"\nMean CV MAE: {np.mean(cv_scores):.4f} (+/- {np.std(cv_scores):.4f})")
-'''
