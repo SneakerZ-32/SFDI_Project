@@ -30,6 +30,34 @@ if len(physical_devices) > 0:
     
 #%% Check for GPU
 gpu_available = tf.test.is_gpu_available()
+
+#%% Load and preprocess the dataset
+def load_and_preprocess_data(file_path):
+    data = pd.read_csv(file_path)
+    
+    # Group the data by input_file
+    grouped = data.groupby('input_file')
+    
+    X_list = []
+    y_list = []
+    
+    for _, group in grouped:
+        # Extract phase and amplitude values (assuming 5 frequencies)
+        phases = group['phase'].values
+        amplitudes = group['amplitude'].values
+        
+        # Combine phase and amplitude into a single input vector
+        X = np.concatenate([phases, amplitudes])
+        
+        # Extract mua and musp (assuming they're constant for each input_file)
+        y = group[['mua', 'musp']].iloc[0].values
+        
+        X_list.append(X)
+        y_list.append(y)
+        
+        
+    
+    return np.array(X_list), np.array(y_list)  
     
 #%% Just load a  dataset
 
