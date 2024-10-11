@@ -53,84 +53,24 @@ def load_and_preprocess_data(file_path):
     return np.array(X_list), np.array(y_list)
 
 #%%Add noise
-def add_noise_to_dataset(X, y, phase_snr_db=20, amplitude_snr_db=25):
-    noisy_X = X.copy()
-    num_features = X.shape[1] // 2  # Assuming the first half are phases and the second half are amplitudes
-    
-    # Function to add noise based on SNR
-    def add_noise_snr(signal, snr_db):
-        signal_power = np.mean(signal**2)
-        noise_power = signal_power / (10**(snr_db/10))
-        noise = np.random.normal(0, np.sqrt(noise_power), signal.shape)
-        return signal + noise
-    
-    # Add noise to phases
-    noisy_X[:, :num_features] = add_noise_snr(noisy_X[:, :num_features], phase_snr_db)
-    
-    # Add noise to amplitudes
-    noisy_X[:, num_features:] = add_noise_snr(noisy_X[:, num_features:], amplitude_snr_db)
-    
+def add_noise_to_dataset(X, y, noise_mean=0, noise_std=0.0):
+    noisy_X = X + np.random.normal(noise_mean, noise_std, X.shape)
     return np.vstack((X, noisy_X)), np.vstack((y, y))
-
 #%%Remove and Mask
 def remove_and_mask_data(X, y, removal_percentage=0.0):
     mask = np.random.choice([True, False], size=X.shape, p=[1-removal_percentage, removal_percentage])
     X_masked = np.where(mask, X, np.nan)
     return X_masked, y
 #%%Package for previous functions
-def preprocess_data_with_augmentation(file_path, phase_snr_db=20, amplitude_snr_db=25, removal_percentage=0.1):
+def preprocess_data_with_augmentation(file_path, noise_mean=0, noise_std=0.0, removal_percentage=0.0):
     X, y = load_and_preprocess_data(file_path)
-    X_noisy, y_noisy = add_noise_to_dataset(X, y, phase_snr_db, amplitude_snr_db)
+    X_noisy, y_noisy = add_noise_to_dataset(X, y, noise_mean, noise_std)
     X_masked, y_masked = remove_and_mask_data(X_noisy, y_noisy, removal_percentage)
-    return X_masked, y_masked, X  # Return original X for comparison
-#%% Plots
-def plot_original_vs_noisy(X_original, X_noisy):
-    num_features = X_original.shape[1] // 2
-    fig, axs = plt.subplots(2, 2, figsize=(15, 15))
-    
-    # Plot phases
-    axs[0, 0].scatter(X_original[:100, 0], X_original[:100, 1], alpha=0.5, label='Original')
-    axs[0, 0].scatter(X_noisy[100:200, 0], X_noisy[100:200, 1], alpha=0.5, label='Noisy')
-    axs[0, 0].set_title('Phases: Original vs Noisy')
-    axs[0, 0].set_xlabel('Phase 1')
-    axs[0, 0].set_ylabel('Phase 2')
-    axs[0, 0].legend()
-    
-    # Plot amplitudes
-    axs[0, 1].scatter(X_original[:100, num_features], X_original[:100, num_features+1], alpha=0.5, label='Original')
-    axs[0, 1].scatter(X_noisy[100:200, num_features], X_noisy[100:200, num_features+1], alpha=0.5, label='Noisy')
-    axs[0, 1].set_title('Amplitudes: Original vs Noisy')
-    axs[0, 1].set_xlabel('Amplitude 1')
-    axs[0, 1].set_ylabel('Amplitude 2')
-    axs[0, 1].legend()
-    
-    # Plot phase distribution
-    axs[1, 0].hist(X_original[:, 0], bins=50, alpha=0.5, label='Original')
-    axs[1, 0].hist(X_noisy[X_original.shape[0]:, 0], bins=50, alpha=0.5, label='Noisy')
-    axs[1, 0].set_title('Phase 1 Distribution')
-    axs[1, 0].set_xlabel('Phase 1')
-    axs[1, 0].set_ylabel('Frequency')
-    axs[1, 0].legend()
-    
-    # Plot amplitude distribution
-    axs[1, 1].hist(X_original[:, num_features], bins=50, alpha=0.5, label='Original')
-    axs[1, 1].hist(X_noisy[X_original.shape[0]:, num_features], bins=50, alpha=0.5, label='Noisy')
-    axs[1, 1].set_title('Amplitude 1 Distribution')
-    axs[1, 1].set_xlabel('Amplitude 1')
-    axs[1, 1].set_ylabel('Frequency')
-    axs[1, 1].legend()
-    
-    plt.tight_layout()
-    plt.show()
+    return X_masked, y_masked
 
-# Load and preprocess the dataset with augmentation
-X, y, X_original = preprocess_data_with_augmentation('dataset.csv', 
-                                                     phase_snr_db=20, 
-                                                     amplitude_snr_db=25, 
-                                                     removal_percentage=0.1)
 
-# Plot original vs noisy data
-plot_original_vs_noisy(X_original, X)
+#%% Load and preprocess the dataset with augmentation
+X, y = preprocess_data_with_augmentation('dataset.csv', noise_mean=0, noise_std=0.001, removal_percentage=0.0)
 
 #%% Split the data into training, validation, and test sets
 X_train_val, X_test, y_train_val, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
